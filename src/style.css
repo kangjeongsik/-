@@ -105,3 +105,51 @@
 
 /* V25.9.11: independent mobile result view */
 .mobileResultView{min-height:100vh;padding-bottom:32px}.mobileResultHeader{width:min(760px,94%);margin:18px auto 8px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#e8d3ff}.mobileResultHeader small{color:#b9a3ca}.mobileResultView .result{margin:12px auto;width:min(760px,94%)}.mobileSaveActions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:24px 0}.mobileSaveActions button{min-width:0;white-space:normal}@media(max-width:600px){.mobileSaveActions{grid-template-columns:1fr}.mobileResultHeader{flex-direction:column;align-items:flex-start}.mobileResultView .result{padding:18px 14px}}@media print{.mobileResultHeader,.mobileSaveActions,.mobileResultView .detailToggle{display:none!important}.mobileResultView,.mobileResultView .result{background:white!important;color:black!important;box-shadow:none!important;width:100%!important;max-width:none!important}.mobileResultView .result *{print-color-adjust:exact;-webkit-print-color-adjust:exact}.mobileResultView .result{margin:0!important;padding:0!important}}
+
+/* V25.9.12: readable PDF even when Android print preview disables background graphics. */
+@media print {
+  @page { size: auto; margin: 12mm; }
+  html, body, #root, .app, .mobileResultView, .mobileResultView .result {
+    background: #fff !important; color: #171717 !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .mobileResultView .result, .mobileResultView .result *,
+  .mobileResultView .result *::before, .mobileResultView .result *::after {
+    color: #171717 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+  .mobileResultView .result .readingCard,
+  .mobileResultView .result .resultHero,
+  .mobileResultView .result .tarotTopSummary,
+  .mobileResultView .result .questionBubble,
+  .mobileResultView .result .tarotMiniMeta,
+  .mobileResultView .result .dailyHero,
+  .mobileResultView .result .dailyScores section,
+  .mobileResultView .result .dailyBlock,
+  .mobileResultView .result .doAvoid section,
+  .mobileResultView .result .luckyBlock,
+  .mobileResultView .result .closingCard,
+  .mobileResultView .result .annualGrid > div,
+  .mobileResultView .result .bioGrid > div,
+  .mobileResultView .result .timeGrid > div,
+  .mobileResultView .result .fortuneGrid > div,
+  .mobileResultView .result .luckGrid > div,
+  .mobileResultView .result .keywordRow b,
+  .mobileResultView .result .luckKeywords span,
+  .mobileResultView .result .sajuGrid > div,
+  .mobileResultView .result .elements span,
+  .mobileResultView .result .tenGods,
+  .mobileResultView .result .easyGlossary,
+  .mobileResultView .result .currentLuckBadge,
+  .mobileResultView .result .aiFallbackNotice {
+    background: #fff !important; background-image: none !important;
+    border: 1px solid #aaa !important;
+  }
+  .mobileResultView .result .readingCard,
+  .mobileResultView .result .resultHero,
+  .mobileResultView .result .dailyBlock,
+  .mobileResultView .result .tarotTopSummary { break-inside: avoid-page; }
+  .mobileResultView .result .card { max-width: 210px; }
+  .mobileResultView .result .resultDisclaimer { color: #444 !important; }
+}
