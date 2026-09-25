@@ -1,0 +1,9 @@
+{
+  "name": "사주 타로 무인 키오스크",
+  "short_name": "운세키오스크",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080610",
+  "theme_color": "#160c24",
+  "icons": []
+}
