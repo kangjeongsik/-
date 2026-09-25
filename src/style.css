@@ -96,3 +96,9 @@
 @media(max-width:650px){.audioDock{right:8px;top:8px}.audioDock button{padding:7px 8px;font-size:10px}}
 
 .voiceStatus{position:absolute;right:0;top:42px;white-space:nowrap;background:#160d20dd;border:1px solid #80648d;border-radius:12px;padding:7px 10px;color:#ffe5a5;font-size:11px}
+
+/* V25.9.10: separate audio controls from fullscreen/admin header */
+.audioDock{position:relative;top:auto;right:auto;z-index:3;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:10px auto 8px;padding:0 12px;max-width:920px;box-sizing:border-box}
+.audioDock button{font-size:12px;min-height:36px;padding:8px 12px}
+.audioDock .voiceStatus{position:static;white-space:normal;max-width:100%;text-align:center}
+@media(max-width:650px){.audioDock{top:auto;right:auto;margin:8px auto;gap:5px}.audioDock button{font-size:11px;padding:8px 9px}}
