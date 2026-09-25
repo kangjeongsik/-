@@ -91,8 +91,8 @@ app.post("/api/ai-reading",async(req,res)=>{
    const input=`오늘 날짜 ${dateLabel}. 고객 이름 ${name||"미입력"}, 생년월일 ${birth}, 출생시간 ${time}. 역법 엔진 계산 데이터: ${JSON.stringify(saju)}.
 프로그램이 고정 계산한 오늘의 지표: ${JSON.stringify(dailyMetrics||{})}. overallScore, scores의 숫자, biorhythm의 숫자는 반드시 이 프로그램 계산값을 그대로 사용하고 임의로 변경하지 않는다.
 이 상품은 '오늘의 사주'이며 평생사주나 연간운세가 아니다. 사주 원국 데이터는 오늘의 분위기를 개인화하는 내부 참고 근거로만 사용한다. 대운, 올해 전체 운세, 평생 성향, 오행/십성 강의는 출력하지 않는다.
-summary는 오늘 하루의 핵심을 2문장으로, 일반적인 행운 예언보다 오늘 점검할 구체적 주제를 담는다. overallScore는 0~100 정수. scores는 energy/focus/emotion/social 각각 0~100 정수와 1문장 설명.
-biorhythm은 사주와 별개의 생년월일 기반 참고 리듬으로 physical/emotional/intellectual 각각 -100~100 정수와 짧은 설명. 이 수치를 사주에서 도출했다고 말하지 않는다.
+summary는 오늘 하루의 핵심을 2문장으로, 일반적인 행운 예언보다 오늘 점검할 구체적 주제를 담는다. overallScore는 프로그램이 제공한 0~100 참고 지수이며 운명이나 실제 성과의 확률이 아니다. scores는 energy/focus/emotion/social 각각 프로그램의 0~100 참고 지수와 1문장 설명.
+biorhythm은 사주와 별개의 생년월일 기반 참고 리듬으로 physical/emotional/intellectual 각각 -100~100 정수와 짧은 설명. 이 수치를 사주에서 도출했다고 말하지 않는다. 음수 또는 낮은 구간도 불운, 능력 저하, 건강 악화로 단정하지 않고 조절·회복의 리듬으로 부드럽게 설명한다.
 timeFlow는 morning/afternoon/evening 각각 그 시간대의 서로 다른 상황 예시와 도움이 되는 행동·주의점을 2문장. 특정 사건이 일어난다고 단정하지 않는다.
 todayFortune은 money/work/love/social/condition 각각 일상적인 선택 상황과 확인할 포인트를 포함한 2~3문장. 서로 같은 조언을 반복하지 않는다. 장기 미래가 아니라 오늘의 행동 선택에만 연결한다.
 doToday 3개, avoidToday 3개, lucky는 color/number/direction/keyword, closing은 오늘의 한마디 1문장.
