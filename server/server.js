@@ -8,17 +8,18 @@ const db=path.resolve("server/results.json");if(!fs.existsSync(db))fs.writeFileS
 const read=()=>JSON.parse(fs.readFileSync(db,"utf8")),save=d=>fs.writeFileSync(db,JSON.stringify(d,null,2));
 const ai=process.env.OPENAI_API_KEY?new OpenAI({apiKey:process.env.OPENAI_API_KEY}):null;
 const pinFile=path.resolve("server/admin.json");
-if(!fs.existsSync(pinFile))fs.writeFileSync(pinFile,JSON.stringify({pin:process.env.ADMIN_PIN||"1234"},null,2));
-const getPin=()=>process.env.ADMIN_PIN||JSON.parse(fs.readFileSync(pinFile,"utf8")).pin;
-const validPin=p=>String(p)===String(getPin());
+// A public server must not fall back to a known default administrator PIN.
+const getPin=()=>process.env.ADMIN_PIN||null;
+const validPin=p=>Boolean(getPin())&&String(p)===String(getPin());
 const settingsFile=path.resolve("server/settings.json");
-const readSettings=()=>JSON.parse(fs.readFileSync(settingsFile,"utf8"));
+const defaultSettings={storeName:"오늘의 운세",idleSeconds:120,prices:{saju:5000,tarot:5000,premium:9000,couple:7000},paymentProvider:"mock",resultRetentionDays:30,autoCleanup:true};
+const readSettings=()=>fs.existsSync(settingsFile)?{...defaultSettings,...JSON.parse(fs.readFileSync(settingsFile,"utf8"))}:defaultSettings;
 const writeSettings=x=>fs.writeFileSync(settingsFile,JSON.stringify(x,null,2));
 const salesFile=path.resolve("server/sales.json");
 if(!fs.existsSync(salesFile))fs.writeFileSync(salesFile,"[]");
 const readSales=()=>JSON.parse(fs.readFileSync(salesFile,"utf8"));
 const writeSales=x=>fs.writeFileSync(salesFile,JSON.stringify(x,null,2));
-app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.5",ai:!!ai}));
+app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.6",ai:!!ai}));
 app.get("/api/settings",(q,s)=>s.json(readSettings()));
 function cleanupResults(){
  const cfg=readSettings();if(!cfg.autoCleanup)return 0;
@@ -26,7 +27,7 @@ function cleanupResults(){
  for(const [k,v] of Object.entries(d)){if(v.createdAt&&new Date(v.createdAt).getTime()<cut){delete d[k];n++}}
  if(n)save(d);return n;
 }
-app.post("/api/admin/change-pin",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const np=String(q.body.newPin||"");if(!/^\d{4,8}$/.test(np))return s.status(400).json({ok:false,error:"PIN은 숫자 4~8자리"});if(process.env.ADMIN_PIN)return s.status(400).json({ok:false,error:"환경변수 ADMIN_PIN 사용 중에는 화면에서 변경할 수 없습니다."});fs.writeFileSync(pinFile,JSON.stringify({pin:np},null,2));s.json({ok:true})});
+app.post("/api/admin/change-pin",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const np=String(q.body.newPin||"");if(!/^\d{4,8}$/.test(np))return s.status(400).json({ok:false,error:"PIN은 숫자 4~8자리"});return s.status(400).json({ok:false,error:"Render Environment의 ADMIN_PIN에서 변경하세요."})});
 app.post("/api/admin/restore",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const b=q.body.backup;if(!b||typeof b!=="object")return s.status(400).json({ok:false});if(b.settings)writeSettings(b.settings);if(Array.isArray(b.sales))writeSales(b.sales);if(b.results&&typeof b.results==="object")save(b.results);s.json({ok:true})});
 app.post("/api/admin/cleanup",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});s.json({ok:true,deleted:cleanupResults()})});
 setInterval(cleanupResults,6*60*60*1000);setTimeout(cleanupResults,3000);
@@ -123,4 +124,4 @@ if(fs.existsSync(distPath)){
   });
 }
 const PORT=process.env.PORT||3001;
-app.listen(PORT,"0.0.0.0",()=>console.log(`V25.9.5 server running on port ${PORT}`));
+app.listen(PORT,"0.0.0.0",()=>console.log(`V25.9.6 server running on port ${PORT}`));
