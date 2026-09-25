@@ -1,56 +1,62 @@
 import express from "express";
 import fs from "fs";import path from "path";import OpenAI from "openai";
+import pg from "pg";
 import {calculateSaju} from "./saju.js";
 import {confirmPayment} from "./payment.js";
 const app=express();app.use(express.json());
 app.use((req,res,next)=>{res.setHeader("Access-Control-Allow-Origin","*");res.setHeader("Access-Control-Allow-Headers","Content-Type");res.setHeader("Access-Control-Allow-Methods","GET,POST,OPTIONS");if(req.method==="OPTIONS")return res.sendStatus(204);next()});
-const db=path.resolve("server/results.json");if(!fs.existsSync(db))fs.writeFileSync(db,"{}");
-const read=()=>JSON.parse(fs.readFileSync(db,"utf8")),save=d=>fs.writeFileSync(db,JSON.stringify(d,null,2));
 const ai=process.env.OPENAI_API_KEY?new OpenAI({apiKey:process.env.OPENAI_API_KEY}):null;
-const pinFile=path.resolve("server/admin.json");
-// A public server must not fall back to a known default administrator PIN.
 const getPin=()=>process.env.ADMIN_PIN||null;
 const validPin=p=>Boolean(getPin())&&String(p)===String(getPin());
-const settingsFile=path.resolve("server/settings.json");
 const defaultSettings={storeName:"오늘의 운세",idleSeconds:120,prices:{saju:5000,tarot:5000,premium:9000,couple:7000},paymentProvider:"mock",resultRetentionDays:30,autoCleanup:true};
-const readSettings=()=>fs.existsSync(settingsFile)?{...defaultSettings,...JSON.parse(fs.readFileSync(settingsFile,"utf8"))}:defaultSettings;
-const writeSettings=x=>fs.writeFileSync(settingsFile,JSON.stringify(x,null,2));
-const salesFile=path.resolve("server/sales.json");
-if(!fs.existsSync(salesFile))fs.writeFileSync(salesFile,"[]");
-const readSales=()=>JSON.parse(fs.readFileSync(salesFile,"utf8"));
-const writeSales=x=>fs.writeFileSync(salesFile,JSON.stringify(x,null,2));
-app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.6",ai:!!ai}));
-app.get("/api/settings",(q,s)=>s.json(readSettings()));
-function cleanupResults(){
- const cfg=readSettings();if(!cfg.autoCleanup)return 0;
- const days=Math.max(1,Number(cfg.resultRetentionDays||30)),cut=Date.now()-days*86400000,d=read();let n=0;
+const usePg=Boolean(process.env.DATABASE_URL);
+const pool=usePg?new pg.Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:10000}):null;
+const filePath=name=>path.resolve("server",name+".json");
+const defaults={settings:defaultSettings,sales:[],results:{}};
+const clone=x=>JSON.parse(JSON.stringify(x));
+async function getData(name){
+ if(pool){const r=await pool.query("SELECT value FROM kiosk_data WHERE name=$1",[name]);return r.rows.length?r.rows[0].value:clone(defaults[name]);}
+ const f=filePath(name);return fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):clone(defaults[name]);
+}
+async function putData(name,value){
+ if(pool){await pool.query("INSERT INTO kiosk_data(name,value) VALUES($1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET value=EXCLUDED.value",[name,JSON.stringify(value)]);return;}
+ fs.writeFileSync(filePath(name),JSON.stringify(value,null,2));
+}
+const read=()=>getData("results"),save=d=>putData("results",d);
+const readSettings=()=>getData("settings"),writeSettings=d=>putData("settings",d);
+const readSales=()=>getData("sales"),writeSales=d=>putData("sales",d);
+function asyncRoute(fn){return (req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next)}
+app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.7",ai:!!ai,storage:usePg?"postgres":"local"}));
+app.get("/api/settings",asyncRoute(async(q,s)=>s.json(await readSettings())));
+async function cleanupResults(){
+ const cfg=await readSettings();if(!cfg.autoCleanup)return 0;
+ const days=Math.max(1,Number(cfg.resultRetentionDays||30)),cut=Date.now()-days*86400000,d=await read();let n=0;
  for(const [k,v] of Object.entries(d)){if(v.createdAt&&new Date(v.createdAt).getTime()<cut){delete d[k];n++}}
- if(n)save(d);return n;
+ if(n)await save(d);return n;
 }
 app.post("/api/admin/change-pin",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const np=String(q.body.newPin||"");if(!/^\d{4,8}$/.test(np))return s.status(400).json({ok:false,error:"PIN은 숫자 4~8자리"});return s.status(400).json({ok:false,error:"Render Environment의 ADMIN_PIN에서 변경하세요."})});
-app.post("/api/admin/restore",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const b=q.body.backup;if(!b||typeof b!=="object")return s.status(400).json({ok:false});if(b.settings)writeSettings(b.settings);if(Array.isArray(b.sales))writeSales(b.sales);if(b.results&&typeof b.results==="object")save(b.results);s.json({ok:true})});
-app.post("/api/admin/cleanup",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});s.json({ok:true,deleted:cleanupResults()})});
-setInterval(cleanupResults,6*60*60*1000);setTimeout(cleanupResults,3000);
-app.post("/api/admin/settings",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const cur=readSettings();const next={...cur,...q.body.settings,prices:{...cur.prices,...(q.body.settings?.prices||{})}};writeSettings(next);s.json({ok:true,settings:next})});
-app.post("/api/admin/clear-results",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});save({});s.json({ok:true})});
-app.post("/api/admin/clear-sales",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});writeSales([]);s.json({ok:true})});
-app.post("/api/admin/export",(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});s.json({ok:true,exportedAt:new Date().toISOString(),settings:readSettings(),sales:readSales(),results:read()})});
-
+app.post("/api/admin/restore",asyncRoute(async(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const b=q.body.backup;if(!b||typeof b!=="object")return s.status(400).json({ok:false});if(b.settings)await writeSettings(b.settings);if(Array.isArray(b.sales))await writeSales(b.sales);if(b.results&&typeof b.results==="object")await save(b.results);s.json({ok:true})}));
+app.post("/api/admin/cleanup",asyncRoute(async(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});s.json({ok:true,deleted:await cleanupResults()})}));
+setInterval(()=>cleanupResults().catch(e=>console.error("[CLEANUP]",e)),6*60*60*1000);
+app.post("/api/admin/settings",asyncRoute(async(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});const cur=await readSettings();const next={...cur,...q.body.settings,prices:{...cur.prices,...(q.body.settings?.prices||{})}};await writeSettings(next);s.json({ok:true,settings:next})}));
+app.post("/api/admin/clear-results",asyncRoute(async(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});await save({});s.json({ok:true})}));
+app.post("/api/admin/clear-sales",asyncRoute(async(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});await writeSales([]);s.json({ok:true})}));
+app.post("/api/admin/export",asyncRoute(async(q,s)=>{if(!validPin(q.body.pin))return s.status(401).json({ok:false});s.json({ok:true,exportedAt:new Date().toISOString(),settings:await readSettings(),sales:await readSales(),results:await read()})}));
 app.post("/api/admin/login",(q,s)=>s.json({ok:validPin(q.body.pin)}));
-app.post("/api/payment/confirm",async(q,s)=>{
+app.post("/api/payment/confirm",asyncRoute(async(q,s)=>{
  const result=await confirmPayment(q.body);
  if(result.ok){
-   const sales=readSales();sales.push({orderId:q.body.orderId,amount:Number(q.body.amount||0),product:q.body.product||"",createdAt:new Date().toISOString()});writeSales(sales);
+   const sales=await readSales();sales.push({orderId:q.body.orderId,amount:Number(q.body.amount||0),product:q.body.product||"",createdAt:new Date().toISOString()});await writeSales(sales);
  }
  s.json(result);
-});
-app.post("/api/admin/stats",(q,s)=>{
+}));
+app.post("/api/admin/stats",asyncRoute(async(q,s)=>{
  if(!validPin(q.body.pin))return s.status(401).json({ok:false});
- const sales=readSales(),now=new Date();
+ const sales=await readSales(),now=new Date();
  const day=sales.filter(x=>new Date(x.createdAt).toDateString()===now.toDateString());
  const month=sales.filter(x=>{const d=new Date(x.createdAt);return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()});
  s.json({ok:true,totalCount:sales.length,totalRevenue:sales.reduce((a,x)=>a+x.amount,0),dayCount:day.length,dayRevenue:day.reduce((a,x)=>a+x.amount,0),monthCount:month.length,monthRevenue:month.reduce((a,x)=>a+x.amount,0),recent:sales.slice(-20).reverse()});
-});
+}));
 app.post("/api/saju",(q,s)=>{try{s.json({ok:true,...calculateSaju(q.body)})}catch(e){s.status(400).json({ok:false,error:"생년월일/시간을 확인하세요."})}});
 app.post("/api/ai-reading",async(req,res)=>{
  const {kind,name,birth,time,card,reversed,saju,tier,person1,person2,dailyMetrics}=req.body;
@@ -112,8 +118,8 @@ doToday 3개, avoidToday 3개, lucky는 color/number/direction/keyword, closing�
   return res.json({ok:true,mode:"ai",sections:JSON.parse(r.output_text)});
  }catch(e){console.error("[AI-READING ERROR]",e);res.status(500).json({ok:false,error:e?.message||"AI reading failed"})}
 });
-app.post("/api/result",(q,s)=>{const d=read();d[q.body.id]={...q.body,createdAt:new Date().toISOString()};save(d);s.json({ok:true,id:q.body.id})});
-app.get("/api/result/:id",(q,s)=>{const x=read()[q.params.id];x?s.json(x):s.status(404).json({error:"not found"})});
+app.post("/api/result",asyncRoute(async(q,s)=>{const d=await read();d[q.body.id]={...q.body,createdAt:new Date().toISOString()};await save(d);s.json({ok:true,id:q.body.id})}));
+app.get("/api/result/:id",asyncRoute(async(q,s)=>{const x=(await read())[q.params.id];x?s.json(x):s.status(404).json({error:"not found"})}));
 
 const distPath=path.resolve(process.cwd(),"dist");
 if(fs.existsSync(distPath)){
@@ -124,4 +130,9 @@ if(fs.existsSync(distPath)){
   });
 }
 const PORT=process.env.PORT||3001;
-app.listen(PORT,"0.0.0.0",()=>console.log(`V25.9.6 server running on port ${PORT}`));
+app.use((err,req,res,next)=>{console.error("[STORAGE/ROUTE ERROR]",err);if(!res.headersSent)res.status(503).json({ok:false,error:"서버 저장소 오류. 관리자에게 문의하세요."})});
+async function start(){
+ if(pool){await pool.query("CREATE TABLE IF NOT EXISTS kiosk_data (name TEXT PRIMARY KEY, value JSONB NOT NULL)");await pool.query("SELECT 1");}
+ app.listen(PORT,"0.0.0.0",()=>console.log(`V25.9.7 server running on port ${PORT}; storage=${usePg?"postgres":"local"}`));
+}
+start().catch(e=>{console.error("[DATABASE STARTUP ERROR]",e);process.exit(1)});
