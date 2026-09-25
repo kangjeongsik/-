@@ -153,3 +153,13 @@
   .mobileResultView .result .card { max-width: 210px; }
   .mobileResultView .result .resultDisclaimer { color: #444 !important; }
 }
+
+/* V25.9.13: audio controls, status underneath, discreet admin access */
+.audioDock{position:relative!important;top:auto!important;right:auto!important;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin:10px auto 8px;padding:0 45px;max-width:920px;z-index:3}
+.audioDock>.net{position:static!important;left:auto!important;top:auto!important;transform:none!important;flex:0 0 100%;width:max-content;max-width:100%;margin:0 auto;text-align:center;white-space:normal}
+.audioDock>.voiceStatus{flex:0 0 100%;text-align:center}
+header{position:relative;padding-right:48px}
+.adminSecret{position:absolute;right:0;top:0;width:42px;height:42px;border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;opacity:0;cursor:pointer;z-index:10}
+.adminSecret:focus-visible{opacity:1;outline:2px solid #c7a2eb;outline-offset:-4px}
+@media(max-width:650px){.audioDock{padding:0 16px}.adminSecret{width:44px;height:44px}}
+@media print{.audioDock,.adminSecret{display:none!important}}
