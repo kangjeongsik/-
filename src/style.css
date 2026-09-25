@@ -163,3 +163,6 @@ header{position:relative;padding-right:48px}
 .adminSecret:focus-visible{opacity:1;outline:2px solid #c7a2eb;outline-offset:-4px}
 @media(max-width:650px){.audioDock{padding:0 16px}.adminSecret{width:44px;height:44px}}
 @media print{.audioDock,.adminSecret{display:none!important}}
+
+/* V25.9.14: compact centered connection/idle indicator */
+.audioDock>.net{flex:0 1 auto!important;width:fit-content!important;max-width:calc(100vw - 32px)!important;min-width:0!important;box-sizing:border-box!important;padding:6px 16px!important;border-radius:999px!important;line-height:1.5!important}
