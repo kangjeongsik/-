@@ -167,8 +167,7 @@ header{position:relative;padding-right:48px}
 /* V25.9.14: compact centered connection/idle indicator */
 .audioDock>.net{flex:0 1 auto!important;width:fit-content!important;max-width:calc(100vw - 32px)!important;min-width:0!important;box-sizing:border-box!important;padding:6px 16px!important;border-radius:999px!important;line-height:1.5!important}
 
-/* V25.9.18 몰입형 해석 카드 */
-.uncannyCard{margin:20px 0;background:linear-gradient(135deg,#241331,#15101f);border:1px solid #d6a8ff66;box-shadow:0 10px 35px #0005;text-align:left}.uncannyCard h3{color:#f0d6ff}.uncannyCard blockquote{margin:16px 0 0;padding:14px 16px;border-left:3px solid #d4a1ff;background:#ffffff08;border-radius:8px;color:#ffe8b5;font-size:18px;font-weight:700;line-height:1.65}.uncannyCard p{line-height:1.8;white-space:pre-wrap}
-@media print{.uncannyCard{background:white!important;color:#111!important;border:1px solid #ddd;box-shadow:none}.uncannyCard h3,.uncannyCard p,.uncannyCard blockquote{color:#111!important}}
-
-.feedbackCard{margin:24px 0;padding:18px;border:1px solid #ffffff1d;border-radius:16px;background:#ffffff08;text-align:center}.feedbackCard>b,.feedbackCard>span{display:block}.feedbackCard>span{margin:7px 0 14px;color:#aaa;font-size:12px}.feedbackCard>div{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.feedbackCard button{padding:11px 13px;border-radius:20px;border:1px solid #ffffff22;background:#120c1c;color:#eee}.feedbackCard button.selected{background:#7542a8;border-color:#d4a1ff}.feedbackCard button.selected~button:not(.selected){opacity:.55}@media print{.feedbackCard{display:none}}
+/* V25.9.19 immersive reading */
+.uncannyCard{border-color:#8f69b6!important;background:linear-gradient(145deg,rgba(76,39,94,.34),rgba(24,14,36,.88))!important}
+.uncannyCard blockquote{margin:18px 0 0;padding:16px 18px;border-left:4px solid #ffd985;background:rgba(255,217,133,.07);border-radius:8px;color:#ffe7a9;font-size:18px;font-weight:800;line-height:1.65}
+.readingCards details[open] summary{border-bottom:1px solid rgba(255,255,255,.08)}
