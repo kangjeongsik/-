@@ -27,7 +27,7 @@ const read=()=>getData("results"),save=d=>putData("results",d);
 const readSettings=()=>getData("settings"),writeSettings=d=>putData("settings",d);
 const readSales=()=>getData("sales"),writeSales=d=>putData("sales",d);
 function asyncRoute(fn){return (req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next)}
-app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.7",ai:!!ai,storage:usePg?"postgres":"local"}));
+app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.19",ai:!!ai,storage:usePg?"postgres":"local"}));
 app.get("/api/settings",asyncRoute(async(q,s)=>s.json(await readSettings())));
 async function cleanupResults(){
  const cfg=await readSettings();if(!cfg.autoCleanup)return 0;
