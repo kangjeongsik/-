@@ -79,7 +79,7 @@ const read=()=>getData("results"),save=d=>putData("results",d);
 const readSettings=()=>getData("settings"),writeSettings=d=>putData("settings",d);
 const readSales=()=>getData("sales"),writeSales=d=>putData("sales",d);
 function asyncRoute(fn){return (req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next)}
-app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.22",ai:!!ai,storage:usePg?"postgres":"local"}));
+app.get("/api/health",(q,s)=>s.json({ok:true,version:"25.9.23",ai:!!ai,storage:usePg?"postgres":"local"}));
 app.get("/api/settings",asyncRoute(async(q,s)=>s.json(await readSettings())));
 async function cleanupResults(){
  const cfg=await readSettings();if(!cfg.autoCleanup)return 0;
@@ -111,8 +111,33 @@ app.post("/api/admin/stats",asyncRoute(async(q,s)=>{
  s.json({ok:true,totalCount:sales.length,totalRevenue:sales.reduce((a,x)=>a+x.amount,0),dayCount:day.length,dayRevenue:day.reduce((a,x)=>a+x.amount,0),monthCount:month.length,monthRevenue:month.reduce((a,x)=>a+x.amount,0),recent:sales.slice(-20).reverse()});
 }));
 app.post("/api/saju",(q,s)=>{try{s.json({ok:true,...calculateSaju(q.body)})}catch(e){s.status(400).json({ok:false,error:"생년월일/시간을 확인하세요."})}});
+
+function ageProfileFromBirth(birth){
+ const y=Number(String(birth||"").slice(0,4)), nowY=new Date().getFullYear();
+ if(!y||y<1900||y>nowY) return {band:"adult",label:"성인",age:0,focus:"직업·재물·관계·가족·중요한 결정"};
+ const age=nowY-y; // 학교급에 더 자연스러운 연령대 추정을 위한 연도 차이
+ if(age<=6) return {band:"child",label:"아동",age,focus:"가족·놀이·친구·생활 습관"};
+ if(age<=12) return {band:"elementary",label:"초등학생",age,focus:"학교생활·선생님과의 관계·친구관계·공부 습관·칭찬과 자신감·관심사"};
+ if(age<=15) return {band:"middle",label:"중학생",age,focus:"친구관계·이성친구/호감 관계·학교생활·공부 방식·감정 변화·부모와의 관계·관심 분야"};
+ if(age<=18) return {band:"high",label:"고등학생",age,focus:"학업·시험·진로·친구관계·이성관계·독립심·스트레스 대처"};
+ if(age<=24) return {band:"young",label:"대학생·청년",age,focus:"전공·진로·취업 준비·연애·친구관계·독립·돈 관리 시작"};
+ if(age<=49) return {band:"adult",label:"성인",age,focus:"직업·사업·재물·연애/결혼·가족·인간관계·중요한 결정"};
+ if(age<=64) return {band:"middleage",label:"중장년",age,focus:"재물관리·직업/사업 변화·가족·자녀관계·생활 안정·앞으로의 방향"};
+ return {band:"senior",label:"시니어",age,focus:"가족관계·재정 안정·인간관계·생활 리듬·취미와 활동·삶의 방향"};
+}
+function agePrompt(p){
+ const common=`연령대: ${p.label}. 중심 주제: ${p.focus}. 사주 계산값 자체는 나이에 따라 바꾸지 말고, 해석의 사례·어휘·관심사만 이 연령대의 실제 생활에 맞춘다.`;
+ if(p.band==="elementary") return common+" 특히 선생님과의 관계를 핵심 관심사 중 하나로 다룬다. 선생님의 칭찬·지적을 받아들이는 방식, 질문하거나 도움을 청하는 방식, 수업·숙제·친구 사이에서 선생님과 상호작용하는 장면을 계산값이 뒷받침하는 범위에서 구체화한다. 재물은 용돈·간식·준비물, 직업은 재능·관심 분야, 조직은 학교·학급생활로 바꿔 해석한다. 연애·배우자·결혼·투자·사업 중심 표현은 사용하지 않는다.";
+ if(p.band==="middle") return common+" 특히 또래의 이성친구나 좋아하는 사람에 대한 관심을 중요한 주제로 다룬다. 호감 표현, 연락·메시지, 상대 반응을 신경 쓰는 방식, 친구들 사이에서의 관계를 연령에 맞고 건전한 수준으로 구체화한다. 성적인 내용이나 결혼·배우자 중심 표현은 사용하지 않는다. 재물은 용돈·소비 습관, 직업은 재능·진로 탐색, 조직은 학교·학급·동아리로 바꿔 해석한다.";
+ if(p.band==="high") return common+" 대학·취업을 확정적으로 예언하지 말고 공부 방식, 시험 준비, 진로 탐색, 친구·호감 관계의 소통을 중심으로 쓴다. 재물은 용돈·소비·첫 돈관리 경험 수준으로 다룬다.";
+ if(p.band==="child") return common+" 보호자와 가족, 놀이, 친구, 선생님/돌봄 어른과의 상호작용 중심으로 매우 쉽고 긍정적인 언어를 사용한다. 연애·재물·직업 예측은 하지 않는다.";
+ return common;
+}
+
 app.post("/api/ai-reading",async(req,res)=>{
  const {kind,name,birth,time,card,reversed,saju,tier,person1,person2,dailyMetrics}=req.body;
+ const ageProfile=ageProfileFromBirth(birth);
+ const ageGuide=agePrompt(ageProfile);
  const fallback=kind==="tarot"?`${card}의 상징을 오늘의 상황에 비추어 차분히 살펴보세요.`:`${name||"고객"}님의 운세입니다. 중요한 선택은 실제 조건과 함께 살펴보세요.`;
  if(!ai)return res.status(503).json({ok:false,error:"OPENAI_API_KEY 설정이 없습니다."});
  try{
@@ -132,7 +157,9 @@ app.post("/api/ai-reading",async(req,res)=>{
   }
   const year=new Date().getFullYear();
   if(kind==="couple"){
-   const input=`첫 번째 사람 이름은 ${person1.name||"첫 번째 사람"}, 계산값 ${JSON.stringify(person1.saju)}. 두 번째 사람 이름은 ${person2.name||"두 번째 사람"}, 계산값 ${JSON.stringify(person2.saju)}. 첫 번째 사람 V2 행동근거: ${sajuEvidence(person1.saju)}. 두 번째 사람 V2 행동근거: ${sajuEvidence(person2.saju)}. 제공된 역법 계산값만 해석하고 임의로 사주를 재계산하지 말 것. 두 사람의 차이를 우열로 판단하지 말고 상호작용을 설명한다. 결과 문장에서는 A/B라는 호칭을 절대 쓰지 말고 반드시 실제 이름을 사용한다.
+   const age1=ageProfileFromBirth(person1?.birth), age2=ageProfileFromBirth(person2?.birth);
+   const coupleAgeGuide=`첫 번째 사람: ${agePrompt(age1)} 두 번째 사람: ${agePrompt(age2)} 두 사람 중 한 명이라도 미성년 연령대면 결혼·배우자·공동재정·성적 친밀감 중심으로 해석하지 말고 친구/호감/소통/학교생활 중심의 건전한 관계 해석으로 바꾼다.`;
+   const input=`첫 번째 사람 이름은 ${person1.name||"첫 번째 사람"}, 계산값 ${JSON.stringify(person1.saju)}. 두 번째 사람 이름은 ${person2.name||"두 번째 사람"}, 계산값 ${JSON.stringify(person2.saju)}. 첫 번째 사람 V2 행동근거: ${sajuEvidence(person1.saju)}. 두 번째 사람 V2 행동근거: ${sajuEvidence(person2.saju)}. 제공된 역법 계산값만 해석하고 임의로 사주를 재계산하지 말 것. 두 사람의 차이를 우열로 판단하지 말고 상호작용을 설명한다. ${coupleAgeGuide} 결과 문장에서는 A/B라는 호칭을 절대 쓰지 말고 반드시 실제 이름을 사용한다.
 품질 목표는 두 사람이 읽으면서 “우리 둘이 실제로 이러는데?”라고 느낄 정도로 구체적인 관계 패턴을 보여주는 것이다. 단, 실제 과거 사건이나 상대의 숨은 마음을 알고 있다고 주장하지 않는다. summary는 궁합 점수 같은 평가가 아니라 두 사람 사이에서 가장 두드러지는 상호작용을 고객에게 직접 말하는 2문장. uncannyPattern은 연락 빈도, 약속 정하는 방식, 서운함을 표현하는 방식, 다툰 뒤 풀어가는 방식, 소비·생활 리듬 중 계산값으로 설명 가능한 장면 2~3개를 4~6문장으로 묘사한다. contrast는 “한 사람은 이렇게 반응하고 다른 사람은 이렇게 받아들이기 쉬워 엇갈린다”처럼 두 사람의 차이가 실제 생활에서 어떻게 보일지 3~4문장으로 쓴다. sharpLine은 이 커플만의 핵심 상호작용을 기억에 남게 압축한 한 문장. 키워드 3개, 잘 맞는 점 3개는 서로 다른 구체적 관점. 끌림/연애스타일/대화갈등/친밀감/생활/재물/장기관계는 각각 3~4문장으로, 두 사람 각각의 관점과 생활 속 사례를 포함한다. “서로 배려하세요/대화가 중요합니다” 같은 범용 조언만으로 문단을 채우지 않는다. 각 항목에서 같은 칭찬과 경고를 반복하지 않는다. V2.1에서는 uncannyPattern에서 쓴 장면을 다른 항목에서 되풀이하지 않고, attraction=끌리는 이유, loveStyle=애정 표현, communication=갈등과 회복, intimacy=정서적 가까움, lifestyle=일상 리듬, money=공동 지출 판단, longTerm=장기 운영 방식으로 역할을 분리한다. 계산값이 부족하면 추측을 사실처럼 꾸미지 않는다. ${year}년 커플 흐름은 기회/대화/생활/주의 4영역. 행동조언 3개는 오늘부터 실제로 해볼 수 있게 구체적으로 쓴다. 확정적 결혼·이별 예언, 공포 조장, 성적 능력 판단 금지. JSON 외 텍스트 금지.`;
    const schema={type:"object",properties:{summary:{type:"string"},uncannyPattern:{type:"string"},contrast:{type:"string"},sharpLine:{type:"string"},keywords:{type:"array",items:{type:"string"},minItems:3,maxItems:3},strengths:{type:"array",items:{type:"string"},minItems:3,maxItems:3},attraction:{type:"string"},loveStyle:{type:"string"},communication:{type:"string"},intimacy:{type:"string"},lifestyle:{type:"string"},money:{type:"string"},longTerm:{type:"string"},annual:{type:"object",properties:{opportunity:{type:"string"},communication:{type:"string"},lifestyle:{type:"string"},caution:{type:"string"}},required:["opportunity","communication","lifestyle","caution"],additionalProperties:false},advice:{type:"array",items:{type:"string"},minItems:3,maxItems:3}},required:["summary","uncannyPattern","contrast","sharpLine","keywords","strengths","attraction","loveStyle","communication","intimacy","lifestyle","money","longTerm","annual","advice"],additionalProperties:false};
    const r=await ai.responses.create({model:process.env.OPENAI_MODEL||"gpt-4.1-mini",instructions:"상업용 커플 사주 키오스크의 읽기 쉬운 참고·오락 콘텐츠를 작성한다. 계산값을 바탕으로 구체적이되 결정론적 표현은 피한다. 명리 전문용어(비견·겁재·식신·상관·편재·정재·편관·정관·편인·정인·천간·지지·일간·대운 등)를 고객 설명문에 사용할 때는 반드시 같은 문장 안에서 일상적인 쉬운 말로 뜻을 풀어 쓴다. 전문용어만 나열하지 않는다. 반드시 JSON 객체 하나만 출력한다.",input,text:{format:{type:"json_schema",name:"couple_reading_v25_9_21",strict:true,schema}}});
@@ -145,7 +172,7 @@ app.post("/api/ai-reading",async(req,res)=>{
    const input=`오늘 날짜 ${dateLabel}. 고객 이름 ${name||"미입력"}, 생년월일 ${birth}, 출생시간 ${time}. 역법 엔진 계산 데이터: ${JSON.stringify(saju)}.
 해석 엔진 V2 행동근거: ${sajuEvidence(saju)}.
 프로그램이 고정 계산한 오늘의 지표: ${JSON.stringify(dailyMetrics||{})}. overallScore, scores의 숫자, biorhythm의 숫자는 반드시 이 프로그램 계산값을 그대로 사용하고 임의로 변경하지 않는다.
-이 상품은 '오늘의 사주'이며 평생사주나 연간운세가 아니다. 사주 원국 데이터는 오늘의 분위기를 개인화하는 내부 참고 근거로만 사용한다. 대운, 올해 전체 운세, 평생 성향, 오행/십성 강의는 출력하지 않는다.
+${ageGuide}\n이 상품은 '오늘의 사주'이며 평생사주나 연간운세가 아니다. 사주 원국 데이터는 오늘의 분위기를 개인화하는 내부 참고 근거로만 사용한다. 대운, 올해 전체 운세, 평생 성향, 오행/십성 강의는 출력하지 않는다.
 summary는 오늘 하루의 핵심을 고객에게 직접 말하는 2문장으로 쓴다. “기운이 좋다/신중하라”만 쓰지 말고 오늘 특히 어디서 체감될지 한 장면을 포함한다. todayMirror는 "오늘 유독 드러나기 쉬운 나의 패턴"으로, 제공된 사주 원국과 오늘 지표를 근거로 연락·결정·일처리·감정반응 같은 생활 장면 3개를 4~6문장으로 구체적으로 묘사한다. 예를 들어 메시지를 쓰고 지웠다가 보내는지, 일을 여러 개 펼친 뒤 하나에 몰입하는지, 서운할 때 바로 말하기보다 혼자 정리하는지처럼 행동 단위로 내려간다. 계산값이 뒷받침하지 않는 장면은 만들지 않는다. 누구에게나 맞는 추상적인 문장과 질문형 나열을 피하고, 실제 사건을 안다고 주장하지 않으며 필요한 곳에만 "~하기 쉽습니다/~일 가능성이 있습니다"를 사용한다. 각 분야 설명도 오늘 실제로 할 법한 선택 하나와 연결한다.
 V2.1 규칙: summary, todayMirror, timeFlow, todayFortune, doToday, avoidToday 사이에서 같은 핵심어·조언·행동 장면을 반복하지 않는다. 이미 한 섹션에서 쓴 근거는 다른 섹션에서 표현만 바꿔 재사용하지 않는다. timeFlow는 오전·오후·저녁에 서로 다른 실제 장면을 배정한다. money는 결제·가격·수량·구독·예산 같은 돈 장면, work는 회의·문서·견적·마감·업무순서 같은 일 장면, love는 가까운 관계의 말과 반응, social은 일반 인간관계와 약속·연락 장면에만 집중한다. condition은 실제 체력이나 건강 상태를 판단하지 말고 생활 리듬·휴식 배분·일정 강도만 다룬다. 추상어만 반복하지 말고 오늘 바로 눈에 보이는 행동으로 쓴다. overallScore는 프로그램이 제공한 0~100 참고 지수이며 운명이나 실제 성과의 확률이 아니다. scores는 energy/focus/emotion/social 각각 프로그램의 0~100 참고 지수와 1문장 설명.
 biorhythm은 사주와 별개의 생년월일 기반 참고 리듬으로 physical/emotional/intellectual 각각 -100~100 정수와 짧은 설명. 이 수치를 사주에서 도출했다고 말하지 않는다. 음수 또는 낮은 구간도 불운, 능력 저하, 건강 악화로 단정하지 않고 조절·회복의 리듬으로 부드럽게 설명한다.
@@ -168,7 +195,7 @@ doToday 3개, avoidToday 3개, lucky는 color/number/direction/keyword, closing�
    const r=await ai.responses.create({model:process.env.OPENAI_MODEL||"gpt-4.1-mini",instructions:"상업용 키오스크의 '오늘의 사주' 전용 데일리 리포트를 작성한다. 오직 오늘 하루의 컨디션과 행동에 집중한다. 연간운세·대운·평생성향을 출력하지 않는다. 바이오리듬은 사주와 별개의 참고·오락 지표임을 지킨다. 반드시 지정 JSON 객체 하나만 출력한다.",input,text:{format:{type:"json_schema",name:"daily_saju_v25_9_21",strict:true,schema}}});
    return res.json({ok:true,mode:"ai",sections:JSON.parse(r.output_text)});
   }
-  const input=`고객 이름 ${name||"미입력"}, 생년월일 ${birth}, 시간 ${time}. 검증용 역법 엔진 계산 데이터: ${JSON.stringify(saju)}. 해석 엔진 V2 행동근거: ${sajuEvidence(saju)}. 제공값만 해석하고 팔자·십성·오행을 임의로 재계산하지 말 것. 오행 counts만으로 용신·희신·강약을 단정하지 말 것. 상품은 프리미엄 종합운세. 목표는 “성격이 좋다/책임감이 있다” 같은 범용 문구가 아니라 계산값이 실제 생활에서 어떻게 보이는지 장면으로 번역하는 고밀도 개인 보고서다. 핵심요약 1문장, 키워드 3개, 핵심포인트 3개. hiddenPattern은 "남들은 잘 모르는 나"로 겉으로 보이는 모습과 실제 속반응의 차이를 연락, 부탁, 관계 정리, 돈, 일 중 계산값으로 뒷받침되는 생활 장면 3개를 4~6문장으로 구체화한다. decisionStyle은 중요한 결정을 앞뒀을 때 자료를 반복 확인하는지, 주변 의견을 듣고도 이미 정한 답을 확인받는지, 오래 미루다가 한 번에 밀어붙이는지 등 계산값으로 설명 가능한 패턴을 4~6문장으로 쓴다. stressPattern은 압박받거나 서운할 때 말투가 짧아지는지, 연락을 줄이는지, 혼자 정리한 뒤 결론을 통보하는지 등 가능한 반응을 4~6문장으로 쓴다. 단, 계산값으로 뒷받침되지 않는 예시는 억지로 넣지 않는다. 각 항목은 실제 과거 사건을 안다고 주장하지 말고 관찰형 문장을 중심으로 쓰되 필요한 곳에만 조건부 표현을 쓴다. “그럴 수 있습니다”를 모든 문장 끝에 반복하지 않는다. 성향/강점/보완점/재물/돈관리/사업직업/직장흐름/연애배우자/대인관계/건강생활을 각 4~5문장으로 작성한다. 각 항목마다 최소 하나는 실제 생활 행동 장면을 포함하고, 다른 사람에게 이름만 바꿔 붙여도 되는 문장은 피한다. 각 항목은 제공된 명식 정보에 연결되는 전통적 해석의 근거, 일상에서 체감할 수 있는 구체적인 예시, 균형 잡힌 주의점 또는 행동 제안을 담는다. 근거가 부족하면 단정하지 않는다. 문장과 조언을 항목 간 반복하지 않는다. 동일 핵심어(예: 신중함·책임감·안정·혼자 생각함)를 세 개 이상의 섹션에서 재사용하지 않는다. 각 섹션은 서로 다른 근거 신호를 우선 배정한다. V2.1에서는 한 섹션에서 사용한 생활 장면과 핵심 조언을 다른 섹션에서 재사용하지 않는다. 재물은 실제 돈의 흐름과 판단, 사업직업은 문제 해결·추진 방식, 직장흐름은 조직 내 역할과 협업, 연애는 가까운 관계의 표현 방식, 대인관계는 일반 인간관계의 거리 조절처럼 영역을 분리한다. hiddenPattern은 관계/연락, decisionStyle은 판단 과정, stressPattern은 압박 반응, money는 현금흐름 판단, career는 문제 해결 방식처럼 역할을 분리한다. 제공된 계산값에 대운 정보가 있을 때만 현재 대운과 다음 대운을 구분하고, 올해 분기별 흐름(Q1~Q4)을 추가한다. 특정 시기에 사건·수익·건강 결과가 확정된다고 쓰지 않는다. 현재대운 키워드 3개. ${year}년 재물/일/관계/주의를 구체적으로 작성. 행동조언 3개. 확정적 예언 금지. 건강은 생활관리 수준. JSON 외 텍스트 금지.`;
+  const input=`고객 이름 ${name||"미입력"}, 생년월일 ${birth}, 시간 ${time}. 검증용 역법 엔진 계산 데이터: ${JSON.stringify(saju)}. 해석 엔진 V2 행동근거: ${sajuEvidence(saju)}. 제공값만 해석하고 팔자·십성·오행을 임의로 재계산하지 말 것. 오행 counts만으로 용신·희신·강약을 단정하지 말 것. 상품은 프리미엄 종합운세. ${ageGuide} 화면의 기존 JSON 키가 성인식 이름이어도 실제 본문은 연령대에 맞는 주제로 치환해 작성한다. 목표는 “성격이 좋다/책임감이 있다” 같은 범용 문구가 아니라 계산값이 실제 생활에서 어떻게 보이는지 장면으로 번역하는 고밀도 개인 보고서다. 핵심요약 1문장, 키워드 3개, 핵심포인트 3개. hiddenPattern은 "남들은 잘 모르는 나"로 겉으로 보이는 모습과 실제 속반응의 차이를 연락, 부탁, 관계 정리, 돈, 일 중 계산값으로 뒷받침되는 생활 장면 3개를 4~6문장으로 구체화한다. decisionStyle은 중요한 결정을 앞뒀을 때 자료를 반복 확인하는지, 주변 의견을 듣고도 이미 정한 답을 확인받는지, 오래 미루다가 한 번에 밀어붙이는지 등 계산값으로 설명 가능한 패턴을 4~6문장으로 쓴다. stressPattern은 압박받거나 서운할 때 말투가 짧아지는지, 연락을 줄이는지, 혼자 정리한 뒤 결론을 통보하는지 등 가능한 반응을 4~6문장으로 쓴다. 단, 계산값으로 뒷받침되지 않는 예시는 억지로 넣지 않는다. 각 항목은 실제 과거 사건을 안다고 주장하지 말고 관찰형 문장을 중심으로 쓰되 필요한 곳에만 조건부 표현을 쓴다. “그럴 수 있습니다”를 모든 문장 끝에 반복하지 않는다. 성향/강점/보완점/재물/돈관리/사업직업/직장흐름/연애배우자/대인관계/건강생활을 각 4~5문장으로 작성한다. 각 항목마다 최소 하나는 실제 생활 행동 장면을 포함하고, 다른 사람에게 이름만 바꿔 붙여도 되는 문장은 피한다. 각 항목은 제공된 명식 정보에 연결되는 전통적 해석의 근거, 일상에서 체감할 수 있는 구체적인 예시, 균형 잡힌 주의점 또는 행동 제안을 담는다. 근거가 부족하면 단정하지 않는다. 문장과 조언을 항목 간 반복하지 않는다. 동일 핵심어(예: 신중함·책임감·안정·혼자 생각함)를 세 개 이상의 섹션에서 재사용하지 않는다. 각 섹션은 서로 다른 근거 신호를 우선 배정한다. V2.1에서는 한 섹션에서 사용한 생활 장면과 핵심 조언을 다른 섹션에서 재사용하지 않는다. 재물은 실제 돈의 흐름과 판단, 사업직업은 문제 해결·추진 방식, 직장흐름은 조직 내 역할과 협업, 연애는 가까운 관계의 표현 방식, 대인관계는 일반 인간관계의 거리 조절처럼 영역을 분리한다. hiddenPattern은 관계/연락, decisionStyle은 판단 과정, stressPattern은 압박 반응, money는 현금흐름 판단, career는 문제 해결 방식처럼 역할을 분리한다. 제공된 계산값에 대운 정보가 있을 때만 현재 대운과 다음 대운을 구분하고, 올해 분기별 흐름(Q1~Q4)을 추가한다. 특정 시기에 사건·수익·건강 결과가 확정된다고 쓰지 않는다. 현재대운 키워드 3개. ${year}년 재물/일/관계/주의를 구체적으로 작성. 행동조언 3개. 확정적 예언 금지. 건강은 생활관리 수준. JSON 외 텍스트 금지.`;
   const props={summary:{type:"string"},hiddenPattern:{type:"string"},decisionStyle:{type:"string"},stressPattern:{type:"string"},keywords:{type:"array",items:{type:"string"},minItems:3,maxItems:3},highlights:{type:"array",items:{type:"string"},minItems:3,maxItems:3},personality:{type:"string"},strengths:{type:"string"},weaknesses:{type:"string"},money:{type:"string"},moneyHabits:{type:"string"},career:{type:"string"},workplace:{type:"string"},love:{type:"string"},relationships:{type:"string"},health:{type:"string"},luckKeywords:{type:"array",items:{type:"string"},minItems:3,maxItems:3},luckFlow:{type:"string"},nextLuck:{type:"string"},annual:{type:"object",properties:{money:{type:"string"},work:{type:"string"},relationship:{type:"string"},caution:{type:"string"}},required:["money","work","relationship","caution"],additionalProperties:false},quarters:{type:"object",properties:{q1:{type:"string"},q2:{type:"string"},q3:{type:"string"},q4:{type:"string"}},required:["q1","q2","q3","q4"],additionalProperties:false},advice:{type:"array",items:{type:"string"},minItems:3,maxItems:3}};
   const schema={type:"object",properties:props,required:Object.keys(props),additionalProperties:false};
   const r=await ai.responses.create({model:process.env.OPENAI_MODEL||"gpt-4.1-mini",instructions:"상업용 무인 사주 키오스크의 프리미엄 종합운세다. 계산 엔진 제공값만 해석한다. 장기·종합형 개인 보고서로 작성하고 쉬운 표현을 우선한다. 전문용어는 사용할 경우 바로 뜻을 풀어 쓴다. 반드시 JSON 객체 하나만 출력한다.",input,text:{format:{type:"json_schema",name:"premium_saju_v25_9_21",strict:true,schema}}});
